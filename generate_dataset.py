@@ -62,18 +62,19 @@ def generate_series(label, T):
     """Generates continuous vital signs with clinical trends."""
     t = np.linspace(0, 1, T)
     if label == 0:  # Stable
-        hr = 75 + np.random.normal(0, 3, T)
-        rr = 16 + np.random.normal(0, 2, T)
-        spo2 = 98 + np.random.normal(0, 1, T)
-        sbp = 120 + np.random.normal(0, 5, T)
+        hr = 75 + np.random.normal(0, 10, T)
+        rr = 16 + np.random.normal(0, 5, T)
+        spo2 = 98 - (2 * t) + np.random.normal(0, 2, T)
+        sbp = 120 + np.random.normal(0, 12, T)
     else:  # Deteriorating (Simulating Respiratory/Cardiac failure)
-        hr = 75 + (30 * t) + np.random.normal(0, 4, T)  # Rising HR
-        rr = 16 + (12 * t) + np.random.normal(0, 3, T)  # Rising RR
-        spo2 = 98 - (12 * t) + np.random.normal(0, 2, T)  # Falling SpO2
-        sbp = 120 - (25 * t) + np.random.normal(0, 7, T)  # Falling SBP
+        hr = 75 + (15 * t) + np.random.normal(0, 12, T)  # Rising HR
+        rr = 16 + (6 * t) + np.random.normal(0, 6, T)  # Rising RR
+        spo2 = 98 - (6 * t) + np.random.normal(0, 3, T)  # Falling SpO2
+        sbp = 120 - (15 * t) + np.random.normal(0, 15, T)  # Falling SBP
 
     # Clip values to biological reality
-    spo2 = np.clip(spo2, 70, 100)
+    spo2 = np.clip(spo2, 80, 100)
+    sbp = np.clip(sbp, 70, 190)
     return np.stack([hr, rr, spo2, sbp], axis=1)
 
 
@@ -82,13 +83,13 @@ def generate_multimodal_notes(label, T):
     notes = []
     for t in range(T):
         # 30% of notes are just routine 'noise' regardless of patient state
-        if random.random() < 0.3:
+        if random.random() < 0.6:
             note = random.choice(neutral_notes)
         elif label == 0:
             note = random.choice(stable_notes)
         else:
             # For deteriorating patients, only show bad signs in the second half of the stay
-            if t < T // 2:
+            if t < T - 4:
                 note = random.choice(random.choice([stable_notes, neutral_notes]))
             else:
                 note = random.choice(deteriorating_notes)

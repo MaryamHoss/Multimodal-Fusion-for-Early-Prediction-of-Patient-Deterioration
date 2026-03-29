@@ -45,7 +45,13 @@ deteriorating_notes = [
     "Decreased urine output noted over last 4 hours."
 ]
 
-
+ambiguous_notes = [
+    "Patient is feeling slightly unwell.",
+    "Reported mild discomfort.",
+    "Patient is sleeping heavily.",
+    "Nausea reported by patient.",
+    "Patient appears slightly pale."
+]
 # -----------------------------
 # DATA GENERATION FUNCTIONS
 # -----------------------------
@@ -59,43 +65,50 @@ def generate_static_data():
 
 
 def generate_series(label, T):
-    """Generates continuous vital signs with clinical trends."""
     t = np.linspace(0, 1, T)
-    if label == 0:  # Stable
-        hr = 75 + np.random.normal(0, 10, T)
-        rr = 16 + np.random.normal(0, 5, T)
-        spo2 = 98 - (2 * t) + np.random.normal(0, 2, T)
-        sbp = 120 + np.random.normal(0, 12, T)
-    else:  # Deteriorating (Simulating Respiratory/Cardiac failure)
-        hr = 75 + (15 * t) + np.random.normal(0, 12, T)  # Rising HR
-        rr = 16 + (6 * t) + np.random.normal(0, 6, T)  # Rising RR
-        spo2 = 98 - (6 * t) + np.random.normal(0, 3, T)  # Falling SpO2
-        sbp = 120 - (15 * t) + np.random.normal(0, 15, T)  # Falling SBP
+    if label == 0: # Stable
+        hr = 80 + np.random.normal(0, 12, T) # More noise
+        rr = 18 + np.random.normal(0, 5, T)
+        spo2 = 97 + np.random.normal(0, 2, T)
+        sbp = 125 + np.random.normal(0, 15, T)
+    else: # Deteriorating
+        # The trend is now very small (only +8 HR)
+        hr = 80 + (8 * t) + np.random.normal(0, 12, T)
+        rr = 18 + (4 * t) + np.random.normal(0, 5, T)
+        # SpO2 only drops to 94 (very close to stable 97)
+        spo2 = 97 - (3 * t) + np.random.normal(0, 3, T)
+        sbp = 125 - (10 * t) + np.random.normal(0, 15, T)
+    
+    return np.stack([hr, rr, np.clip(spo2, 85, 100), np.clip(sbp, 80, 180)], axis=1)
 
-    # Clip values to biological reality
-    spo2 = np.clip(spo2, 80, 100)
-    sbp = np.clip(sbp, 70, 190)
-    return np.stack([hr, rr, spo2, sbp], axis=1)
 
 
 def generate_multimodal_notes(label, T):
-    """Generates clinical notes with 'noise' and temporal progression."""
     notes = []
     for t in range(T):
-        # 30% of notes are just routine 'noise' regardless of patient state
-        if random.random() < 0.6:
-            note = random.choice(neutral_notes)
-        elif label == 0:
-            note = random.choice(stable_notes)
-        else:
-            # For deteriorating patients, only show bad signs in the second half of the stay
-            if t < T - 4:
-                note = random.choice(random.choice([stable_notes, neutral_notes]))
-            else:
+        rand = random.random()
+        
+        # 70% of notes are now 'Neutral' or 'Ambiguous' (Noise)
+        if rand < 0.7:
+            note = random.choice(neutral_notes + ambiguous_notes)
+        elif label == 0: # Stable
+            # 10% chance a stable patient gets a 'deteriorating' note (False Alarm)
+            if random.random() < 0.1:
                 note = random.choice(deteriorating_notes)
+            else:
+                note = random.choice(stable_notes)
+        else: # Deteriorating
+            # 20% chance a sick patient gets a 'stable' note (Missed Signal)
+            if random.random() < 0.2:
+                note = random.choice(stable_notes)
+            else:
+                # Only show deterioration in the very last 2 hours
+                if t < T - 2:
+                    note = random.choice(neutral_notes)
+                else:
+                    note = random.choice(deteriorating_notes)
         notes.append(note)
     return notes
-
 
 # -----------------------------
 # MAIN PIPELINE

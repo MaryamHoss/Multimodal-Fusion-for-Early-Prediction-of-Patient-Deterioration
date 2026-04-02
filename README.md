@@ -70,6 +70,49 @@ After this completes, you should have `patient_data/metadata.csv`, `patient_data
 - **Vitals time series** encoded by a GRU
 - **Fusion**: concatenates both embeddings and passes them through an MLP head
 
+## Model details (inputs → outputs)
+
+### Inputs
+
+The training script loads one example per **patient** by joining the CSVs in `patient_data/`:
+
+- **Vitals**: a fixed 24-hour window of 4 vital signs:
+  - Tensor shape: `(batch, 24, 4)`
+  - Feature order: `HR`, `RR`, `SpO2`, `SBP`
+  - Missing values are handled with forward/backward filling per patient (`ffill().bfill()`).
+
+- **Clinical notes**: all hourly notes for a patient concatenated into one string:
+  - `"note@hour0 [SEP] note@hour1 [SEP] ... [SEP] note@hour23"`
+  - Tokenized with ClinicalBERT tokenizer (padding + truncation) to:
+    - `input_ids` shape: `(batch, seq_len)`
+    - `attention_mask` shape: `(batch, seq_len)`
+
+### Outputs
+
+- The model outputs a **single logit per patient** (binary classification):
+  - `logits` shape: `(batch,)`
+- The predicted **probability of deterioration** is:
+  - `p = sigmoid(logit)` in \([0, 1]\)
+
+### Architecture
+
+`train_fusion_model.py` supports three architectures:
+
+- **Notes-only** (`--ablation notes_only`)
+  - ClinicalBERT encoder → `[CLS]` embedding → linear classification head
+
+- **Vitals-only** (`--ablation vitals_only`)
+  - GRU encoder over 24×4 vitals → last hidden state → linear classification head
+
+- **Multimodal fusion** (`--ablation multimodal`)
+  - ClinicalBERT `[CLS]` embedding (notes) + GRU last hidden state (vitals)
+  - Concatenation → MLP fusion head → logit
+
+### Loss + metric
+
+- Training uses `BCEWithLogitsLoss` with `pos_weight` to account for class imbalance.
+- Validation metric reported is **ROC-AUC**.
+
 ### Multimodal training (notes + vitals)
 
 ```powershell
@@ -105,6 +148,29 @@ Tip: `--freeze_bert` can speed up experiments by training only the GRU/fusion he
 ```powershell
 python train_fusion_model.py --data_dir patient_data --ablation notes_only --freeze_bert --epochs 3
 ```
+
+## Web UI (Streamlit)
+
+This repo includes a Streamlit UI in `app.py` that:
+
+- Loads the **best multimodal checkpoint** from `checkpoints/best_multimodal_model.pt`
+- Lets you select a `Patient_ID` from `patient_data/`
+- Visualizes 24-hour vitals
+- Lets you edit a note and run inference to display **deterioration probability**
+
+### Install UI dependencies
+
+```powershell
+python -m pip install streamlit matplotlib
+```
+
+### Run the UI
+
+```powershell
+streamlit run app.py
+```
+
+If the UI errors due to missing checkpoint, train a multimodal model first (or run ablation `all`) so `checkpoints/best_multimodal_model.pt` exists.
 
 ## Notes
 
